@@ -41,7 +41,7 @@ mongo_db_name = os.getenv("MONGODB_DB", "dukafine")
 client = MongoClient(mongo_uri, serverSelectionTimeoutMS=10000) if mongo_uri else None
 db = client[mongo_db_name] if client else None
 
-if db:
+if db is not None:
     db.users.create_index([("email", ASCENDING)], unique=True)
     db.stores.create_index([("slug", ASCENDING)], unique=True)
     db.products.create_index([("store_id", ASCENDING)])
@@ -125,7 +125,7 @@ def current_user():
         return None
     try:
         payload = jwt.decode(header[7:], SECRET_KEY, algorithms=["HS256"])
-        return db.users.find_one({"_id": oid(payload["sub"])}) if db else None
+        return db.users.find_one({"_id": oid(payload["sub"])}) if db is not None else None
     except Exception:
         return None
 
@@ -150,7 +150,7 @@ def require_admin(fn):
 
 
 def audit(action, actor=None, metadata=None):
-    if not db:
+    if db is None:
         return
     db.audit_logs.insert_one({
         "action": action,
@@ -360,7 +360,7 @@ def initiate_stk(order, customer_phone, vendor_till):
 @app.get("/api/health")
 def health():
     try:
-        if db:
+        if db is not None:
             db.command("ping")
         return jsonify({"ok": True, "service": "dukafine"})
     except Exception as exc:
@@ -378,7 +378,7 @@ def register():
 
     if not all([name, email, phone, password]) or len(password) < 8:
         return jsonify({"error": "Name, email, phone and an 8+ character password are required"}), 400
-    if not db:
+    if db is None:
         return jsonify({"error": "Database is not configured"}), 503
 
     existing = db.users.find_one({"email": email})
@@ -438,7 +438,7 @@ def verify_otp():
     otp = str(data.get("otp", "")).strip()
     if not email or not otp:
         return jsonify({"error": "Email and verification code are required"}), 400
-    if not db:
+    if db is None:
         return jsonify({"error": "Database is not configured"}), 503
 
     user = db.users.find_one({"email": email})
@@ -478,7 +478,7 @@ def resend_otp():
     email = str(data.get("email", "")).strip().lower()
     if not email:
         return jsonify({"error": "Email is required"}), 400
-    if not db:
+    if db is None:
         return jsonify({"error": "Database is not configured"}), 503
 
     user = db.users.find_one({"email": email})
@@ -511,7 +511,7 @@ def login():
     data = request.get_json(force=True) or {}
     email = str(data.get("email", "")).strip().lower()
     password = str(data.get("password", ""))
-    user = db.users.find_one({"email": email}) if db else None
+    user = db.users.find_one({"email": email}) if db is not None else None
 
     if not user or not verify_password(password, user.get("password_hash", "")):
         return jsonify({"error": "Invalid email or password"}), 401
@@ -536,7 +536,7 @@ def me(user):
 
 @app.get("/api/stores")
 def stores():
-    docs = list(db.stores.find({}).sort("created_at", DESCENDING)) if db else []
+    docs = list(db.stores.find({}).sort("created_at", DESCENDING)) if db is not None else []
     return jsonify({"stores": [jsonable(d) for d in docs]})
 
 
@@ -552,13 +552,13 @@ def products():
             {"name": {"$regex": search, "$options": "i"}},
             {"description": {"$regex": search, "$options": "i"}},
         ]
-    docs = list(db.products.find(query).sort("created_at", DESCENDING).limit(100)) if db else []
+    docs = list(db.products.find(query).sort("created_at", DESCENDING).limit(100)) if db is not None else []
     return jsonify({"products": [jsonable(d) for d in docs]})
 
 
 @app.get("/api/products/<product_id>")
 def product_detail(product_id):
-    p = db.products.find_one({"_id": oid(product_id)}) if db else None
+    p = db.products.find_one({"_id": oid(product_id)}) if db is not None else None
     if not p:
         return jsonify({"error": "Product not found"}), 404
     store = db.stores.find_one({"_id": p["store_id"]})
