@@ -1,0 +1,9 @@
+VERCEL DEPLOYMENT CHECKLIST
+1. Push this folder to GitHub.
+2. Import the repository into Vercel.
+3. Add every variable from .env.example to Vercel Environment Variables.
+4. Set MPESA_CALLBACK_URL to https://YOUR-DOMAIN.vercel.app/api/mpesa/callback.
+5. Use MongoDB Atlas for MONGODB_URI.
+6. Run frontend build automatically through vercel.json.
+7. For Daraja production, use MPESA_ENV=production and your authorized production credentials.
+8. Never commit .env.

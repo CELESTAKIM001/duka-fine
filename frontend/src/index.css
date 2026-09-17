@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: #f6f8f7;
+  color: #12231c;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+.glass {
+  background: rgba(255,255,255,.78);
+  border: 1px solid rgba(18,35,28,.08);
+  box-shadow: 0 18px 50px rgba(17,39,29,.07);
+  backdrop-filter: blur(18px);
+}
+
+.product-card {
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.product-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 24px 60px rgba(17,39,29,.11);
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: #cbd5d0; border-radius: 999px; }
+
+/* ---------- OTP modal animations ---------- */
+@keyframes otpOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes otpCardIn {
+  0% { opacity: 0; transform: translateY(18px) scale(.94); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes otpCardOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(10px) scale(.96); }
+}
+@keyframes otpShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+@keyframes otpPop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+@keyframes otpEnvelope {
+  0% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-6px) rotate(-3deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+@keyframes otpCheckIn {
+  0% { opacity: 0; transform: scale(.4) rotate(-20deg); }
+  60% { opacity: 1; transform: scale(1.15) rotate(6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes otpRing {
+  0% { box-shadow: 0 0 0 0 rgba(13,107,69,.35); }
+  100% { box-shadow: 0 0 0 14px rgba(13,107,69,0); }
+}
+@keyframes otpSpin {
+  to { transform: rotate(360deg); }
+}
+
+.otp-overlay { animation: otpOverlayIn .22s ease-out both; }
+.otp-card { animation: otpCardIn .38s cubic-bezier(.2,.9,.3,1.2) both; }
+.otp-card.leaving { animation: otpCardOut .18s ease-in both; }
+.otp-shake { animation: otpShake .45s cubic-bezier(.36,.07,.19,.97) both; }
+.otp-pop { animation: otpPop .3s ease both; }
+.otp-envelope { animation: otpEnvelope 2.4s ease-in-out infinite; }
+.otp-check { animation: otpCheckIn .5s cubic-bezier(.2,.9,.3,1.3) both; }
+.otp-ring { animation: otpRing 1.6s ease-out infinite; }
+.otp-spin { animation: otpSpin .7s linear infinite; }
