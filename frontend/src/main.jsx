@@ -365,6 +365,18 @@ function Account() {
   return <Layout cartCount={0}><div className="max-w-2xl mx-auto px-5 py-12"><div className="bg-white border rounded-3xl p-7"><div className="text-xs uppercase tracking-[.2em] text-emerald-800 font-bold">Account</div><h1 className="text-3xl font-black mt-2">{user?.name || 'Account'}</h1><p className="text-slate-500 mt-2">{user?.email}</p><p className="text-slate-500">{user?.phone_number}</p><button onClick={()=>{localStorage.removeItem('dukafine_token');location.href='/'}} className="mt-6 border border-red-200 text-red-700 rounded-xl px-5 py-3 font-bold">Sign out</button></div></div></Layout>
 }
 
+function NotFound() {
+  return <Layout cartCount={0}>
+    <div className="max-w-xl mx-auto px-5 py-24 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-500 grid place-items-center mx-auto"><Icon name="x" size={28}/></div>
+      <div className="text-xs uppercase tracking-[.2em] text-emerald-800 font-bold mt-6">404</div>
+      <h1 className="text-3xl font-black mt-2">Page not found</h1>
+      <p className="text-slate-500 mt-3">The page you're looking for doesn't exist, was moved, or the link is broken.</p>
+      <Link to="/" className="inline-block mt-7 bg-emerald-800 text-white rounded-xl px-6 py-3 font-bold">Back to marketplace</Link>
+    </div>
+  </Layout>
+}
+
 function App() {
   const [cart,setCart]=useState(()=>JSON.parse(localStorage.getItem('dukafine_cart')||'[]'))
   useEffect(()=>localStorage.setItem('dukafine_cart',JSON.stringify(cart)),[cart])
@@ -381,6 +393,7 @@ function App() {
     <Route path="/account" element={<Account/>}/>
     <Route path="/seller" element={<Seller/>}/>
     <Route path="/admin" element={<Admin/>}/>
+    <Route path="*" element={<NotFound/>}/>
   </Routes>
 }
 
