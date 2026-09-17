@@ -38,7 +38,7 @@ OTP_MAX_ATTEMPTS = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
 
 mongo_uri = os.getenv("MONGODB_URI")
 mongo_db_name = os.getenv("MONGODB_DB", "dukafine")
-client = MongoClient(mongo_uri, serverSelectionTimeoutMS=10000) if mongo_uri else None
+client = MongoClient(mongo_uri, serverSelectionTimeoutMS=10000, tz_aware=True) if mongo_uri else None
 db = client[mongo_db_name] if client else None
 
 if db is not None:
