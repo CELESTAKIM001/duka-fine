@@ -179,12 +179,18 @@ def send_email(to, subject, html, text):
 
     port = int(os.getenv("SMTP_PORT", "587"))
     use_tls = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
-    with smtplib.SMTP(host, port, timeout=20) as smtp:
-        if use_tls:
-            smtp.starttls()
-        smtp.login(username, password)
-        smtp.send_message(msg)
-    return True
+    try:
+        with smtplib.SMTP(host, port, timeout=20) as smtp:
+            if use_tls:
+                smtp.starttls()
+            smtp.login(username, password)
+            smtp.send_message(msg)
+        return True
+    except Exception:
+        # Never let a transient SMTP/network failure (common on serverless
+        # platforms) take down the caller's request. Log and report failure.
+        logger.exception("Failed to send email to %s", to)
+        return False
 
 
 def email_receipt(order, user, store, items):
