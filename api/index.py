@@ -19,25 +19,34 @@ from pymongo.errors import DuplicateKeyError
 
 load_dotenv()
 
+
+def env(name, default=""):
+    """os.getenv, but strips accidental leading/trailing whitespace or newlines
+    that copy-pasting into a dashboard's env var UI can silently introduce.
+    A stray space breaks Base64 auth headers (Daraja, SMTP) and DNS lookups
+    (Mongo) in ways that are very hard to spot by eye."""
+    return (os.getenv(name, default) or "").strip()
+
+
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
-CORS(app, resources={r"/api/*": {"origins": os.getenv("FRONTEND_URL", "*")}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": env("FRONTEND_URL", "*")}}, supports_credentials=True)
 
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logging.basicConfig(level=env("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("dukafine")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_ME")
-JWT_EXPIRES_DAYS = int(os.getenv("JWT_EXPIRES_DAYS", "30"))
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").lower().strip()
-PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", os.getenv("FRONTEND_URL", "http://localhost:5173")).rstrip("/")
+SECRET_KEY = env("SECRET_KEY", "CHANGE_ME")
+JWT_EXPIRES_DAYS = int(env("JWT_EXPIRES_DAYS", "30"))
+ADMIN_EMAIL = env("ADMIN_EMAIL").lower()
+PUBLIC_APP_URL = env("PUBLIC_APP_URL", env("FRONTEND_URL", "http://localhost:5173")).rstrip("/")
 
 OTP_LENGTH = 6
-OTP_EXPIRY_MINUTES = int(os.getenv("OTP_EXPIRY_MINUTES", "10"))
-OTP_RESEND_COOLDOWN_SECONDS = int(os.getenv("OTP_RESEND_COOLDOWN_SECONDS", "60"))
-OTP_MAX_ATTEMPTS = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
+OTP_EXPIRY_MINUTES = int(env("OTP_EXPIRY_MINUTES", "10"))
+OTP_RESEND_COOLDOWN_SECONDS = int(env("OTP_RESEND_COOLDOWN_SECONDS", "60"))
+OTP_MAX_ATTEMPTS = int(env("OTP_MAX_ATTEMPTS", "5"))
 
-mongo_uri = os.getenv("MONGODB_URI")
-mongo_db_name = os.getenv("MONGODB_DB", "dukafine")
+mongo_uri = env("MONGODB_URI")
+mongo_db_name = env("MONGODB_DB", "dukafine")
 client = MongoClient(mongo_uri, serverSelectionTimeoutMS=10000, tz_aware=True) if mongo_uri else None
 db = client[mongo_db_name] if client else None
 
@@ -162,10 +171,10 @@ def audit(action, actor=None, metadata=None):
 
 
 def send_email(to, subject, html, text):
-    host = os.getenv("SMTP_HOST")
-    username = os.getenv("SMTP_USERNAME")
-    password = os.getenv("SMTP_PASSWORD")
-    sender = os.getenv("SMTP_FROM", username or "DUKAFINE <no-reply@example.com>")
+    host = env("SMTP_HOST")
+    username = env("SMTP_USERNAME")
+    password = env("SMTP_PASSWORD")
+    sender = env("SMTP_FROM", username or "DUKAFINE <no-reply@example.com>")
     if not host or not username or not password:
         logger.warning("SMTP is not configured; email skipped for %s", to)
         return False
@@ -177,8 +186,8 @@ def send_email(to, subject, html, text):
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
 
-    port = int(os.getenv("SMTP_PORT", "587"))
-    use_tls = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    port = int(env("SMTP_PORT", "587"))
+    use_tls = env("SMTP_USE_TLS", "true").lower() == "true"
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
             if use_tls:
@@ -297,13 +306,12 @@ def send_otp_email(user, otp):
 
 
 def mpesa_base():
-    env = os.getenv("MPESA_ENV", "sandbox").lower()
-    return "https://sandbox.safaricom.co.ke" if env == "sandbox" else "https://api.safaricom.co.ke"
+    return "https://sandbox.safaricom.co.ke" if env("MPESA_ENV", "sandbox").lower() == "sandbox" else "https://api.safaricom.co.ke"
 
 
 def mpesa_token():
-    key = os.getenv("MPESA_CONSUMER_KEY")
-    secret = os.getenv("MPESA_CONSUMER_SECRET")
+    key = env("MPESA_CONSUMER_KEY")
+    secret = env("MPESA_CONSUMER_SECRET")
     if not key or not secret:
         raise RuntimeError("Daraja consumer credentials are not configured")
     auth = base64.b64encode(f"{key}:{secret}".encode()).decode()
@@ -317,19 +325,19 @@ def mpesa_token():
 
 
 def mpesa_password(timestamp):
-    shortcode = os.getenv("MPESA_BUSINESS_SHORT_CODE", "")
-    passkey = os.getenv("MPESA_PASSKEY", "")
+    shortcode = env("MPESA_BUSINESS_SHORT_CODE")
+    passkey = env("MPESA_PASSKEY")
     raw = f"{shortcode}{passkey}{timestamp}"
     return base64.b64encode(raw.encode()).decode()
 
 
 def initiate_stk(order, customer_phone, vendor_till):
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    shortcode = os.getenv("MPESA_BUSINESS_SHORT_CODE")
-    callback = os.getenv("MPESA_CALLBACK_URL")
-    transaction_type = os.getenv("MPESA_TRANSACTION_TYPE", "CustomerBuyGoodsOnline")
+    shortcode = env("MPESA_BUSINESS_SHORT_CODE")
+    callback = env("MPESA_CALLBACK_URL")
+    transaction_type = env("MPESA_TRANSACTION_TYPE", "CustomerBuyGoodsOnline")
 
-    if not shortcode or not callback or not os.getenv("MPESA_PASSKEY"):
+    if not shortcode or not callback or not env("MPESA_PASSKEY"):
         raise RuntimeError("Daraja shortcode, passkey or callback URL is not configured")
 
     # IMPORTANT: for Buy Goods, PartyB is the vendor's Till.
