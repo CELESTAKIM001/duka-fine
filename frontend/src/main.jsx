@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import './index.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -12,7 +11,7 @@ async function api(path, options = {}) {
   const res = await fetch(`${API}${path}`, { ...options, headers })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const err = new Error(data.error || 'Request failed')
+    const err = new Error(data.error || data.message || 'Request failed')
     err.code = data.code
     err.email = data.email
     err.data = data
@@ -21,311 +20,292 @@ async function api(path, options = {}) {
   return data
 }
 
-function Icon({ name, size = 18 }) {
+const money = n => `KSh ${Number(n || 0).toLocaleString('en-KE')}`
+const placeholder = 'https://placehold.co/900x700/e8f4ee/14532d?text=DukaFine'
+
+function Icon({ name, size = 19 }) {
   const paths = {
-    bag: <><path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 8a3 3 0 0 1 6 0"/><path d="M9 12h.01M15 12h.01"/></>,
+    bag: <><path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 8a3 3 0 0 1 6 0"/></>,
     search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
     user: <><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></>,
     plus: <><path d="M12 5v14M5 12h14"/></>,
+    minus: <path d="M5 12h14"/>,
     arrow: <><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></>,
+    back: <><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></>,
     shield: <><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Z"/><path d="m9 12 2 2 4-4"/></>,
     chart: <><path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 5-6"/></>,
     menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>,
     x: <><path d="m6 6 12 12M18 6 6 18"/></>,
-    share: <><circle cx="18" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="19" r="2"/><path d="m8 11 8-5M8 13l8 5"/></>,
-    check: <path d="m5 12 4 4L19 6"/>
+    check: <path d="m5 12 4 4L19 6"/>,
+    heart: <path d="M20.8 8.7c0 5.5-8.8 10.3-8.8 10.3S3.2 14.2 3.2 8.7A4.7 4.7 0 0 1 12 6.3a4.7 4.7 0 0 1 8.8 2.4Z"/>,
+    store: <><path d="M4 10h16"/><path d="M5 10v10h14V10"/><path d="M3 10 5 4h14l2 6"/><path d="M9 20v-6h6v6"/></>,
+    truck: <><path d="M3 6h11v10H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></>,
+    phone: <><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></>,
+    copy: <><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></>,
+    refresh: <><path d="M20 11a8 8 0 0 0-14.7-4L3 10"/><path d="M3 5v5h5"/><path d="M4 13a8 8 0 0 0 14.7 4L21 14"/><path d="M21 19v-5h-5"/></>,
+    logout: <><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-6"/></>
   }
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.bag}</svg>
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.bag}</svg>
 }
 
-function Layout({ children, cartCount }) {
+function Button({ children, variant = 'primary', className = '', ...props }) {
+  const variants = {
+    primary: 'btn-primary',
+    soft: 'btn-soft',
+    outline: 'btn-outline',
+    danger: 'btn-danger',
+    ghost: 'btn-ghost'
+  }
+  return <button className={`btn ${variants[variant]} ${className}`} {...props}>{children}</button>
+}
+
+function Layout({ children, cartCount = 0 }) {
   const [user, setUser] = useState(null)
+  const [menu, setMenu] = useState(false)
+  const [search, setSearch] = useState('')
+  const location = useLocation()
+  const navigate = useNavigate()
+
   useEffect(() => {
-    if (localStorage.getItem('dukafine_token')) api('/auth/me').then(x => setUser(x.user)).catch(() => localStorage.removeItem('dukafine_token'))
-  }, [])
-  return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-emerald-950/10">
-        <div className="max-w-7xl mx-auto px-5 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-800 text-white grid place-items-center"><Icon name="bag"/></div>
-            <div><div className="font-black tracking-tight text-xl">DukaFine</div><div className="text-[10px] text-emerald-800 uppercase tracking-[.18em]">Kenyan commerce</div></div>
-          </Link>
-          <nav className="flex items-center gap-3">
-            <Link to="/seller" className="hidden sm:block text-sm font-semibold text-slate-600 hover:text-emerald-800">Seller</Link>
-            {user?.role === 'admin' && <Link to="/admin" className="hidden sm:block text-sm font-semibold text-slate-600 hover:text-emerald-800">Admin</Link>}
-            <Link to="/cart" className="relative w-10 h-10 rounded-xl border border-slate-200 grid place-items-center bg-white"><Icon name="bag"/>{cartCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-emerald-800 text-white text-[10px] grid place-items-center">{cartCount}</span>}</Link>
-            <Link to={user ? "/account" : "/login"} className="w-10 h-10 rounded-xl border border-slate-200 grid place-items-center bg-white"><Icon name="user"/></Link>
-          </nav>
+    if (!localStorage.getItem('dukafine_token')) { setUser(null); return }
+    api('/auth/me').then(x => setUser(x.user)).catch(() => {
+      localStorage.removeItem('dukafine_token')
+      setUser(null)
+    })
+  }, [location.pathname])
+
+  const submitSearch = e => {
+    e.preventDefault()
+    navigate(search.trim() ? `/?q=${encodeURIComponent(search.trim())}` : '/')
+    setMenu(false)
+  }
+
+  const logout = () => {
+    localStorage.removeItem('dukafine_token')
+    setUser(null)
+    navigate('/')
+  }
+
+  return <div className="app-shell">
+    <div className="topbar">Free delivery promotions are set by individual stores · Secure checkout with M-Pesa</div>
+    <header className="site-header">
+      <div className="header-inner">
+        <button className="mobile-menu" onClick={() => setMenu(!menu)} aria-label="Menu"><Icon name={menu ? 'x' : 'menu'}/></button>
+        <Link to="/" className="brand" onClick={() => setMenu(false)}>
+          <span className="brand-mark"><Icon name="bag" size={22}/></span>
+          <span><strong>DukaFine</strong><small>Kenyan marketplace</small></span>
+        </Link>
+        <form className="header-search" onSubmit={submitSearch}>
+          <Icon name="search" size={18}/>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products, stores..." aria-label="Search"/>
+          {search && <button type="button" className="search-clear" onClick={() => setSearch('')}><Icon name="x" size={15}/></button>}
+        </form>
+        <nav className="desktop-nav">
+          <Link to="/seller">Sell</Link>
+          {user?.role === 'admin' && <Link to="/admin">Admin</Link>}
+          <Link to={user ? '/account' : '/login'} className="nav-icon"><Icon name="user"/><span>{user ? 'Account' : 'Sign in'}</span></Link>
+          <Link to="/cart" className="nav-cart"><Icon name="bag"/><span>Cart</span>{cartCount > 0 && <b>{cartCount}</b>}</Link>
+        </nav>
+        <div className="mobile-actions">
+          <Link to="/cart" className="icon-button"><Icon name="bag"/>{cartCount > 0 && <b>{cartCount}</b>}</Link>
         </div>
-      </header>
-      {children}
-      <footer className="border-t border-slate-200 mt-16 bg-white">
-        <div className="max-w-7xl mx-auto px-5 py-8 flex flex-col sm:flex-row justify-between gap-3 text-sm text-slate-500">
-          <span>© {new Date().getFullYear()} DukaFine</span><span>Built for Kenyan merchants and shoppers.</span>
-        </div>
-      </footer>
-    </div>
-  )
+      </div>
+      <div className={`mobile-nav ${menu ? 'open' : ''}`}>
+        <form onSubmit={submitSearch} className="mobile-search"><Icon name="search"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search DukaFine..."/></form>
+        <Link to="/seller" onClick={() => setMenu(false)}>Merchant workspace</Link>
+        {user?.role === 'admin' && <Link to="/admin" onClick={() => setMenu(false)}>Admin control center</Link>}
+        <Link to={user ? '/account' : '/login'} onClick={() => setMenu(false)}>{user ? 'My account' : 'Sign in / Register'}</Link>
+      </div>
+    </header>
+    <main>{children}</main>
+    <footer className="footer">
+      <div className="footer-grid">
+        <div><Link to="/" className="brand footer-brand"><span className="brand-mark"><Icon name="bag"/></span><span><strong>DukaFine</strong><small>Kenyan marketplace</small></span></Link><p>Simple online storefronts for Kenyan businesses, with M-Pesa checkout built into the buying journey.</p></div>
+        <div><h4>Shop</h4><Link to="/">Marketplace</Link><Link to="/cart">Cart</Link><Link to="/login">Sign in</Link></div>
+        <div><h4>Business</h4><Link to="/seller">Sell on DukaFine</Link><Link to="/admin">Admin</Link></div>
+        <div><h4>Support</h4><span>Secure M-Pesa checkout</span><span>Email verification</span><span>Order receipts</span></div>
+      </div>
+      <div className="footer-bottom"><span>© {new Date().getFullYear()} DukaFine</span><span>Made for local commerce in Kenya</span></div>
+    </footer>
+  </div>
 }
 
-function Home({ addToCart }) {
-  const [products, setProducts] = useState([])
-  const [q, setQ] = useState('')
-  useEffect(() => { api(`/products?search=${encodeURIComponent(q)}`).then(x => setProducts(x.products)).catch(console.error) }, [q])
-  return <Layout cartCount={0}>
-    <section className="max-w-7xl mx-auto px-5 pt-10">
-      <div className="rounded-[28px] bg-emerald-950 text-white p-7 md:p-12 overflow-hidden relative">
-        <div className="max-w-2xl relative z-10">
-          <div className="text-emerald-300 text-xs font-bold uppercase tracking-[.22em] mb-3">DukaFine marketplace</div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-[.98]">Discover Kenyan stores. Shop with confidence.</h1>
-          <p className="mt-5 text-emerald-100 max-w-xl">A simple storefront experience for local businesses, with secure M-Pesa checkout and order receipts.</p>
-          <div className="mt-7 flex bg-white rounded-2xl p-1.5 max-w-xl">
-            <div className="text-slate-400 grid place-items-center px-3"><Icon name="search"/></div>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search products..." className="flex-1 outline-none text-slate-800 px-2 py-3"/>
-          </div>
-        </div>
-        <div className="absolute right-0 top-0 w-72 h-72 rounded-full bg-emerald-700/30 blur-3xl"/>
-      </div>
-    </section>
-    <section className="max-w-7xl mx-auto px-5 py-10">
-      <div className="flex justify-between items-end mb-5"><div><div className="text-xs uppercase tracking-[.2em] text-emerald-800 font-bold">Marketplace</div><h2 className="text-2xl font-black mt-1">Featured products</h2></div></div>
-      {products.length === 0 ? <div className="glass rounded-3xl p-12 text-center text-slate-500">No products found.</div> :
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {products.map(p => <ProductCard key={p._id} product={p} addToCart={addToCart}/>)}
-      </div>}
-    </section>
-  </Layout>
+function Hero() {
+  return <section className="hero">
+    <div className="hero-copy">
+      <span className="eyebrow light">DukaFine marketplace</span>
+      <h1>Shop local.<br/><em>Grow local.</em></h1>
+      <p>Discover products from Kenyan businesses and check out with a familiar, secure M-Pesa experience.</p>
+      <div className="hero-actions"><Link className="btn btn-white" to="#products">Explore products <Icon name="arrow" size={17}/></Link><Link className="hero-link" to="/seller">I run a business <Icon name="arrow" size={15}/></Link></div>
+    </div>
+    <div className="hero-art">
+      <div className="hero-card hero-card-main"><span>Featured today</span><strong>Local finds</strong><small>Curated products from independent sellers</small><div className="hero-mini-row"><div></div><div></div><div></div><b>+120</b></div></div>
+      <div className="hero-badge"><span>✓</span><div><strong>M-Pesa ready</strong><small>Simple checkout</small></div></div>
+    </div>
+  </section>
 }
 
 function ProductCard({ product, addToCart }) {
-  return <article className="product-card bg-white rounded-3xl border border-slate-200 overflow-hidden">
-    <Link to={`/product/${product._id}`}><img src={product.image_url || 'https://placehold.co/900x700/e8f1ec/17633f?text=DukaFine'} className="w-full aspect-[4/3] object-cover"/></Link>
-    <div className="p-5">
-      <Link to={`/product/${product._id}`} className="font-bold text-lg hover:text-emerald-800">{product.name}</Link>
-      <p className="text-sm text-slate-500 mt-1 line-clamp-2">{product.description}</p>
-      <div className="flex items-center justify-between mt-5"><span className="font-black text-xl">KSh {product.price.toLocaleString()}</span><button onClick={() => addToCart(product)} className="bg-emerald-800 text-white rounded-xl px-4 py-2.5 text-sm font-bold flex items-center gap-2"><Icon name="plus" size={16}/>Cart</button></div>
-      <div className="text-[11px] text-slate-400 mt-3">{product.quantity} in stock</div>
+  const [added, setAdded] = useState(false)
+  const add = () => {
+    addToCart(product)
+    setAdded(true)
+    setTimeout(() => setAdded(false), 1200)
+  }
+  return <article className="product-card">
+    <Link to={`/product/${product._id}`} className="product-image-wrap">
+      <img src={product.image_url || placeholder} alt={product.name} className="product-image"/>
+      {Number(product.quantity) <= 0 ? <span className="stock-pill out">Out of stock</span> : Number(product.quantity) <= 5 ? <span className="stock-pill">Only {product.quantity} left</span> : null}
+    </Link>
+    <div className="product-body">
+      <div className="product-store">{product.store?.vendor_name || 'DukaFine seller'}</div>
+      <Link to={`/product/${product._id}`} className="product-name">{product.name}</Link>
+      <p>{product.description || 'Quality product from a local Kenyan seller.'}</p>
+      <div className="product-bottom"><strong>{money(product.price)}</strong><Button onClick={add} disabled={!product.quantity}>{added ? <><Icon name="check" size={16}/> Added</> : <><Icon name="plus" size={16}/> Add</>}</Button></div>
     </div>
   </article>
+}
+
+function Home({ addToCart }) {
+  const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  const initialQ = params.get('q') || ''
+  const [products, setProducts] = useState([])
+  const [stores, setStores] = useState([])
+  const [q, setQ] = useState(initialQ)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [sort, setSort] = useState('featured')
+  const [stockOnly, setStockOnly] = useState(false)
+
+  useEffect(() => setQ(initialQ), [initialQ])
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    const timer = setTimeout(() => {
+      api(`/products?search=${encodeURIComponent(q)}`)
+        .then(x => { if (alive) setProducts(x.products || []) })
+        .catch(e => { if (alive) setError(e.message) })
+        .finally(() => { if (alive) setLoading(false) })
+    }, 220)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [q])
+
+  useEffect(() => { api('/stores').then(x => setStores(x.stores || [])).catch(() => {}) }, [])
+
+  const visible = useMemo(() => {
+    let list = stockOnly ? products.filter(p => Number(p.quantity) > 0) : [...products]
+    if (sort === 'price-low') list.sort((a,b) => a.price-b.price)
+    if (sort === 'price-high') list.sort((a,b) => b.price-a.price)
+    if (sort === 'name') list.sort((a,b) => a.name.localeCompare(b.name))
+    return list
+  }, [products, sort, stockOnly])
+
+  return <Layout cartCount={0}>
+    <div className="container page-space">
+      <Hero/>
+      <section className="trust-row">
+        <div><span className="trust-icon"><Icon name="shield"/></span><div><strong>Secure checkout</strong><small>Protected account flow</small></div></div>
+        <div><span className="trust-icon"><Icon name="phone"/></span><div><strong>M-Pesa ready</strong><small>Built for Kenyan payments</small></div></div>
+        <div><span className="trust-icon"><Icon name="truck"/></span><div><strong>Local sellers</strong><small>Discover businesses near you</small></div></div>
+        <div><span className="trust-icon"><Icon name="mail"/></span><div><strong>Order receipts</strong><small>Confirmation by email</small></div></div>
+      </section>
+
+      <section id="products" className="section">
+        <div className="section-heading">
+          <div><span className="eyebrow">Marketplace</span><h2>{q ? `Results for “${q}”` : 'Fresh from local sellers'}</h2><p>Browse products published by DukaFine merchants.</p></div>
+          <div className="filters">
+            <label className="check-control"><input type="checkbox" checked={stockOnly} onChange={e => setStockOnly(e.target.checked)}/><span>In stock</span></label>
+            <select value={sort} onChange={e => setSort(e.target.value)}><option value="featured">Featured</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="name">Name</option></select>
+          </div>
+        </div>
+        {error && <div className="alert error">{error}</div>}
+        {loading ? <div className="product-grid">{Array.from({length:6}).map((_,i)=><div className="skeleton-card" key={i}><div className="skeleton image"></div><div className="skeleton line long"></div><div className="skeleton line"></div><div className="skeleton line short"></div></div>)}</div>
+          : visible.length ? <div className="product-grid">{visible.map(p => <ProductCard key={p._id} product={p} addToCart={addToCart}/>)}</div>
+          : <EmptyState title="No products found" text="Try a different search or clear your filters." action={<Button onClick={() => {setQ(''); setStockOnly(false)}}>Clear filters</Button>}/>}
+      </section>
+
+      <section className="section store-strip">
+        <div className="section-heading compact"><div><span className="eyebrow">Local businesses</span><h2>Stores on DukaFine</h2></div><Link className="text-link" to="/seller">Start selling <Icon name="arrow" size={15}/></Link></div>
+        <div className="store-grid">{stores.slice(0,6).map(s => <div className="store-card" key={s._id}><div className="store-avatar"><Icon name="store"/></div><div><strong>{s.vendor_name}</strong><small>Buy Goods Till: {s.till_number || 'Configured by seller'}</small></div></div>)}{!stores.length && <div className="empty-inline">Seller storefronts will appear here as merchants publish them.</div>}</div>
+      </section>
+    </div>
+  </Layout>
+}
+
+function EmptyState({ title, text, action }) {
+  return <div className="empty-state"><div className="empty-icon"><Icon name="bag" size={28}/></div><h3>{title}</h3><p>{text}</p>{action && <div className="empty-action">{action}</div>}</div>
 }
 
 function ProductPage({ addToCart }) {
   const { id } = useParams()
   const [product, setProduct] = useState(null)
-  useEffect(() => { api(`/products/${id}`).then(x => setProduct(x.product)).catch(console.error) }, [id])
-  if (!product) return <Layout cartCount={0}><div className="max-w-7xl mx-auto p-10">Loading...</div></Layout>
-  return <Layout cartCount={0}><div className="max-w-6xl mx-auto px-5 py-10 grid md:grid-cols-2 gap-10">
-    <img src={product.image_url || 'https://placehold.co/900x700'} className="w-full aspect-square object-cover rounded-[28px]"/>
-    <div className="py-5"><div className="text-xs text-emerald-800 font-bold uppercase tracking-[.2em]">{product.store?.vendor_name}</div><h1 className="text-4xl font-black mt-3">{product.name}</h1><div className="text-3xl font-black mt-5">KSh {product.price.toLocaleString()}</div><p className="text-slate-600 mt-5 leading-7">{product.description}</p><div className="mt-5 text-sm text-slate-500">{product.quantity} available</div><button disabled={!product.quantity} onClick={() => addToCart(product)} className="mt-7 w-full sm:w-auto bg-emerald-800 disabled:bg-slate-300 text-white px-7 py-3.5 rounded-xl font-bold">Add to cart</button></div>
-  </div></Layout>
+  const [loading, setLoading] = useState(true)
+  const [qty, setQty] = useState(1)
+  const [added, setAdded] = useState(false)
+  useEffect(() => { setLoading(true); api(`/products/${id}`).then(x => setProduct(x.product)).catch(() => setProduct(null)).finally(() => setLoading(false)) }, [id])
+  if (loading) return <Layout><div className="container page-space"><div className="detail-skeleton"></div></div></Layout>
+  if (!product) return <Layout><div className="container page-space"><EmptyState title="Product not found" text="This product may have been removed or the link is no longer valid." action={<Link className="btn btn-primary" to="/">Back to marketplace</Link>}/></div></Layout>
+  const add = () => { for(let i=0;i<qty;i++) addToCart(product); setAdded(true); setTimeout(()=>setAdded(false),1200) }
+  return <Layout>
+    <div className="container page-space">
+      <Link to="/" className="back-link"><Icon name="back" size={16}/> Back to marketplace</Link>
+      <div className="product-detail">
+        <div className="detail-media"><img src={product.image_url || placeholder} alt={product.name}/></div>
+        <div className="detail-info">
+          <span className="eyebrow">{product.store?.vendor_name || 'DukaFine seller'}</span>
+          <h1>{product.name}</h1>
+          <div className="detail-price">{money(product.price)}</div>
+          <p className="detail-description">{product.description || 'A product offered by a local DukaFine merchant.'}</p>
+          <div className="availability"><span className={product.quantity ? 'dot green' : 'dot red'}></span>{product.quantity ? `${product.quantity} available` : 'Currently unavailable'}</div>
+          {product.quantity > 0 && <div className="quantity-row"><span>Quantity</span><div className="quantity-control"><button onClick={()=>setQty(Math.max(1,qty-1))}><Icon name="minus"/></button><strong>{qty}</strong><button onClick={()=>setQty(Math.min(product.quantity,qty+1))}><Icon name="plus"/></button></div></div>}
+          <Button className="wide-action" disabled={!product.quantity} onClick={add}>{added ? <><Icon name="check"/> Added to cart</> : <><Icon name="bag"/> Add to cart</>}</Button>
+          <div className="detail-benefits"><div><Icon name="shield"/><span><strong>Secure</strong><small>Protected checkout</small></span></div><div><Icon name="phone"/><span><strong>M-Pesa</strong><small>Kenyan payment flow</small></span></div></div>
+        </div>
+      </div>
+    </div>
+  </Layout>
 }
 
 function Cart({ cart, setCart }) {
   const navigate = useNavigate()
-  const total = cart.reduce((s, x) => s + x.price * x.quantity, 0)
-  const update = (id, qty) => setCart(cart.map(x => x._id === id ? {...x, quantity: Math.max(1, qty)} : x))
-  return <Layout cartCount={cart.reduce((s,x)=>s+x.quantity,0)}><div className="max-w-5xl mx-auto px-5 py-10"><h1 className="text-3xl font-black">Your cart</h1>{!cart.length ? <div className="glass rounded-3xl p-10 mt-6 text-center"><p>Your cart is empty.</p><Link to="/" className="inline-block mt-5 bg-emerald-800 text-white rounded-xl px-5 py-3 font-bold">Continue shopping</Link></div> : <div className="mt-6 grid lg:grid-cols-[1fr_320px] gap-5"><div className="space-y-3">{cart.map(x => <div key={x._id} className="bg-white border border-slate-200 rounded-2xl p-4 flex gap-4 items-center"><img src={x.image_url || 'https://placehold.co/120'} className="w-20 h-20 rounded-xl object-cover"/><div className="flex-1"><div className="font-bold">{x.name}</div><div className="text-sm text-slate-500">KSh {x.price.toLocaleString()}</div><div className="flex items-center gap-2 mt-3"><button onClick={()=>update(x._id,x.quantity-1)} className="w-8 h-8 border rounded-lg">−</button><span>{x.quantity}</span><button onClick={()=>update(x._id,x.quantity+1)} className="w-8 h-8 border rounded-lg">+</button></div></div><button onClick={()=>setCart(cart.filter(y=>y._id!==x._id))} className="text-sm text-red-600">Remove</button></div>)}</div><aside className="bg-white border border-slate-200 rounded-2xl p-5 h-fit"><div className="text-sm text-slate-500">Total</div><div className="text-3xl font-black mt-1">KSh {total.toLocaleString()}</div><button onClick={()=>navigate('/checkout')} className="w-full mt-5 bg-emerald-800 text-white py-3.5 rounded-xl font-bold">Checkout</button></aside></div>}</div></Layout>
+  const subtotal = cart.reduce((s,x) => s + x.price*x.quantity, 0)
+  const count = cart.reduce((s,x) => s+x.quantity, 0)
+  const update = (id, qty) => setCart(cart.map(x => x._id === id ? {...x, quantity: Math.max(1, Math.min(Number(x.quantity || 1) + 99, qty))} : x))
+  return <Layout cartCount={count}><div className="container narrow page-space">
+    <div className="page-heading"><span className="eyebrow">Shopping cart</span><h1>Your cart</h1><p>{count ? `${count} item${count===1?'':'s'} ready for checkout.` : 'Your cart is waiting for its first item.'}</p></div>
+    {!cart.length ? <EmptyState title="Your cart is empty" text="Explore local products and add something you like." action={<Link className="btn btn-primary" to="/">Continue shopping</Link>}/> :
+      <div className="cart-layout"><div className="cart-list">{cart.map(x => <div className="cart-item" key={x._id}><img src={x.image_url || placeholder} alt={x.name}/><div className="cart-item-main"><span className="product-store">{x.store?.vendor_name || 'DukaFine seller'}</span><Link to={`/product/${x._id}`} className="cart-name">{x.name}</Link><strong>{money(x.price)}</strong><div className="quantity-control"><button onClick={()=>{if(x.quantity>1) update(x._id,x.quantity-1)}}><Icon name="minus" size={15}/></button><b>{x.quantity}</b><button onClick={()=>update(x._id,x.quantity+1)}><Icon name="plus" size={15}/></button></div></div><button className="remove-link" onClick={()=>setCart(cart.filter(y=>y._id!==x._id))}>Remove</button></div>)}</div>
+      <aside className="summary-card"><span className="eyebrow">Order summary</span><div className="summary-line"><span>Items</span><b>{count}</b></div><div className="summary-line"><span>Subtotal</span><b>{money(subtotal)}</b></div><div className="summary-line muted"><span>Delivery</span><span>Calculated by seller</span></div><div className="summary-total"><span>Subtotal</span><strong>{money(subtotal)}</strong></div><Button className="wide-action" onClick={()=>navigate('/checkout')}>Continue to checkout <Icon name="arrow"/></Button><Link to="/" className="continue-link">Continue shopping</Link></aside></div>}
+  </div></Layout>
 }
 
 function OtpModal({ email, notice, autoResend, onClose, onVerified }) {
-  const [digits, setDigits] = useState(Array(6).fill(''))
-  const [error, setError] = useState('')
-  const [shake, setShake] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [resendLoading, setResendLoading] = useState(false)
-  const [cooldown, setCooldown] = useState(0)
-  const [info, setInfo] = useState(notice || '')
-  const [closing, setClosing] = useState(false)
-  const inputsRef = useRef([])
-
-  useEffect(() => {
-    inputsRef.current[0]?.focus()
-    if (autoResend) resend(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (cooldown <= 0) return
-    const t = setInterval(() => setCooldown(c => (c > 0 ? c - 1 : 0)), 1000)
-    return () => clearInterval(t)
-  }, [cooldown])
-
-  const close = () => { setClosing(true); setTimeout(onClose, 170) }
-
-  const submit = async code => {
-    setError(''); setLoading(true)
-    try {
-      const data = await api('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, otp: code }) })
-      setSuccess(true)
-      setTimeout(() => onVerified(data), 900)
-    } catch (e) {
-      setError(e.message)
-      setShake(true)
-      setDigits(Array(6).fill(''))
-      setTimeout(() => { setShake(false); inputsRef.current[0]?.focus() }, 450)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const setDigit = (i, val) => {
-    if (!/^[0-9]?$/.test(val)) return
-    const next = [...digits]; next[i] = val; setDigits(next)
-    if (val && i < 5) inputsRef.current[i + 1]?.focus()
-    if (next.every(d => d)) submit(next.join(''))
-  }
-
-  const onKeyDown = (i, e) => {
-    if (e.key === 'Backspace' && !digits[i] && i > 0) inputsRef.current[i - 1]?.focus()
-  }
-
-  const onPaste = e => {
-    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
-    if (!text) return
-    e.preventDefault()
-    const next = Array(6).fill('')
-    for (let i = 0; i < text.length; i++) next[i] = text[i]
-    setDigits(next)
-    inputsRef.current[Math.min(text.length, 5)]?.focus()
-    if (text.length === 6) submit(text)
-  }
-
-  const resend = async silent => {
-    setResendLoading(true); if (!silent) setError('')
-    try {
-      const data = await api('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) })
-      setInfo(data.message || 'A new code has been sent.')
-      setCooldown(60)
-    } catch (e) {
-      if (e.data?.retry_after) setCooldown(e.data.retry_after)
-      if (!silent) setError(e.message)
-    } finally {
-      setResendLoading(false)
-    }
-  }
-
-  return (
-    <div className="otp-overlay fixed inset-0 z-50 bg-emerald-950/55 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className={`otp-card${closing ? ' leaving' : ''} bg-white w-full max-w-sm rounded-3xl p-7 relative shadow-2xl`}>
-        <button onClick={close} className="absolute top-4 right-4 w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-          <Icon name="x" size={16}/>
-        </button>
-
-        {!success ? <>
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-800 grid place-items-center mx-auto">
-            <span className="otp-envelope inline-block"><Icon name="shield" size={26}/></span>
-          </div>
-          <h2 className="text-xl font-black text-center mt-4">Verify your email</h2>
-          <p className="text-sm text-slate-500 text-center mt-1.5">We sent a 6-digit code to<br/><span className="font-semibold text-slate-700">{email}</span></p>
-          {info && <div className="mt-4 text-xs text-center text-emerald-800 bg-emerald-50 rounded-xl py-2 px-3">{info}</div>}
-
-          <div className={`flex justify-center gap-2 mt-6 ${shake ? 'otp-shake' : ''}`}>
-            {digits.map((d, i) => (
-              <input
-                key={i}
-                ref={el => (inputsRef.current[i] = el)}
-                value={d}
-                onChange={e => setDigit(i, e.target.value.slice(-1))}
-                onKeyDown={e => onKeyDown(i, e)}
-                onPaste={onPaste}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={1}
-                disabled={loading}
-                className={`w-11 h-14 sm:w-12 sm:h-14 text-center text-xl font-black rounded-xl border-2 outline-none transition-colors ${error ? 'border-red-300 bg-red-50' : 'border-slate-200 focus:border-emerald-600'}`}
-              />
-            ))}
-          </div>
-
-          {error && <div className="text-sm text-red-600 text-center mt-3 font-semibold">{error}</div>}
-
-          <button
-            onClick={() => submit(digits.join(''))}
-            disabled={loading || digits.some(d => !d)}
-            className="w-full mt-6 bg-emerald-800 disabled:bg-slate-300 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
-          >
-            {loading ? <><span className="otp-spin w-4 h-4 border-2 border-white/40 border-t-white rounded-full"/>Verifying...</> : 'Verify email'}
-          </button>
-
-          <div className="text-center mt-5 text-sm text-slate-500">
-            {cooldown > 0
-              ? <span>Resend code in <span className="font-semibold text-slate-700">{cooldown}s</span></span>
-              : <button onClick={() => resend(false)} disabled={resendLoading} className="text-emerald-800 font-bold hover:underline">{resendLoading ? 'Sending...' : "Didn't get it? Resend code"}</button>}
-          </div>
-        </> : (
-          <div className="py-6 text-center">
-            <div className="otp-check otp-ring w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center mx-auto"><Icon name="check" size={30}/></div>
-            <h2 className="text-xl font-black mt-5">Email verified!</h2>
-            <p className="text-sm text-slate-500 mt-1.5">Signing you in...</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  const [code,setCode] = useState('')
+  const [error,setError] = useState('')
+  const [busy,setBusy] = useState(false)
+  const [cooldown,setCooldown] = useState(autoResend ? 60 : 0)
+  useEffect(()=>{ if(!autoResend) return; api('/auth/resend-otp',{method:'POST',body:JSON.stringify({email})}).catch(()=>{}); },[autoResend,email])
+  useEffect(()=>{ if(cooldown<=0)return; const t=setInterval(()=>setCooldown(v=>Math.max(0,v-1)),1000);return()=>clearInterval(t)},[cooldown])
+  const verify=async e=>{e.preventDefault();setError('');if(code.length!==6){setError('Enter the 6-digit verification code.');return}setBusy(true);try{const x=await api('/auth/verify-otp',{method:'POST',body:JSON.stringify({email,otp:code})});onVerified(x)}catch(e){setError(e.message)}finally{setBusy(false)}}
+  const resend=async()=>{if(cooldown)return;setError('');try{await api('/auth/resend-otp',{method:'POST',body:JSON.stringify({email})});setCooldown(60)}catch(e){setError(e.message)}}
+  return <div className="modal-backdrop"><div className="otp-card"><button className="modal-close" onClick={onClose}><Icon name="x"/></button><div className="otp-icon"><Icon name="mail" size={28}/></div><span className="eyebrow">Verify your email</span><h2>Enter your code</h2><p>{notice || `We sent a 6-digit code to ${email}.`}</p><form onSubmit={verify}><input autoFocus inputMode="numeric" maxLength="6" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,''))} className="otp-input" placeholder="000000"/>{error&&<div className="alert error">{error}</div>}<Button className="wide-action" disabled={busy}>{busy?'Verifying...':'Verify email'}</Button></form><button className="resend" disabled={cooldown>0} onClick={resend}>{cooldown ? `Resend code in ${cooldown}s` : 'Resend verification code'}</button></div></div>
 }
 
 function Auth({ mode }) {
   const navigate = useNavigate()
-  const [form, setForm] = useState({name:'',email:'',phone_number:'',password:''})
+  const [form,setForm] = useState({name:'',email:'',phone_number:'',password:''})
   const [error,setError]=useState('')
   const [otpEmail,setOtpEmail]=useState(null)
   const [otpNotice,setOtpNotice]=useState('')
   const [otpAutoResend,setOtpAutoResend]=useState(false)
-
-  const submit = async e => {
-    e.preventDefault(); setError('')
-    try {
-      if (mode === 'login') {
-        const data = await api('/auth/login', { method: 'POST', body: JSON.stringify(form) })
-        localStorage.setItem('dukafine_token', data.token)
-        navigate('/')
-      } else {
-        const data = await api('/auth/register', { method: 'POST', body: JSON.stringify(form) })
-        setOtpAutoResend(false)
-        setOtpNotice(data.message || 'Enter the verification code sent to your email.')
-        setOtpEmail(data.email || form.email)
-      }
-    } catch (e) {
-      if (e.code === 'email_not_verified') {
-        setOtpAutoResend(true)
-        setOtpNotice("Your email isn't verified yet — we're sending you a fresh code.")
-        setOtpEmail(e.email || form.email)
-      } else {
-        setError(e.message)
-      }
-    }
-  }
-
-  return <Layout cartCount={0}>
-    <div className="max-w-md mx-auto px-5 py-12">
-      <div className="bg-white border border-slate-200 rounded-3xl p-7">
-        <div className="w-12 h-12 rounded-2xl bg-emerald-800 text-white grid place-items-center"><Icon name="user"/></div>
-        <h1 className="text-2xl font-black mt-5">{mode==='login'?'Welcome back':'Create your account'}</h1>
-        <p className="text-sm text-slate-500 mt-1">{mode==='login'?'Your session stays active across page reloads.':'We\'ll send a 6-digit code to confirm your email.'}</p>
-        <form onSubmit={submit} className="space-y-4 mt-7">
-          {mode==='register'&&<input required placeholder="Full name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full border rounded-xl p-3"/>}
-          <input required type="email" placeholder="Email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} className="w-full border rounded-xl p-3"/>
-          {mode==='register'&&<input required placeholder="Safaricom phone e.g. 0712345678" value={form.phone_number} onChange={e=>setForm({...form,phone_number:e.target.value})} className="w-full border rounded-xl p-3"/>}
-          <input required minLength="8" type="password" placeholder="Password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full border rounded-xl p-3"/>
-          {error&&<div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</div>}
-          <button className="w-full bg-emerald-800 text-white rounded-xl py-3 font-bold">{mode==='login'?'Sign in':'Create account'}</button>
-        </form>
-        <div className="text-sm mt-5 text-center">{mode==='login'?<Link to="/register" className="text-emerald-800 font-bold">Create an account</Link>:<Link to="/login" className="text-emerald-800 font-bold">Already have an account?</Link>}</div>
-      </div>
-    </div>
-    {otpEmail && (
-      <OtpModal
-        email={otpEmail}
-        notice={otpNotice}
-        autoResend={otpAutoResend}
-        onClose={() => setOtpEmail(null)}
-        onVerified={data => { localStorage.setItem('dukafine_token', data.token); navigate('/') }}
-      />
-    )}
-  </Layout>
+  const submit=async e=>{e.preventDefault();setError('');try{if(mode==='login'){const data=await api('/auth/login',{method:'POST',body:JSON.stringify(form)});localStorage.setItem('dukafine_token',data.token);navigate('/')}else{const data=await api('/auth/register',{method:'POST',body:JSON.stringify(form)});setOtpAutoResend(false);setOtpNotice(data.message || 'Enter the verification code sent to your email.');setOtpEmail(data.email || form.email)}}catch(e){if(e.code==='email_not_verified'){setOtpAutoResend(true);setOtpNotice("Your email isn't verified yet — we're sending you a fresh code.");setOtpEmail(e.email || form.email)}else setError(e.message)}}
+  return <Layout><div className="auth-page container"><div className="auth-panel"><div className="auth-side"><span className="brand-mark large"><Icon name="bag" size={28}/></span><span className="eyebrow light">DukaFine</span><h1>{mode==='login'?'Welcome back.':'Build your account.'}</h1><p>{mode==='login'?'Continue shopping from your saved session.':'Join a growing marketplace for Kenyan businesses and shoppers.'}</p><div className="auth-perks"><span><Icon name="shield"/> Secure account flow</span><span><Icon name="phone"/> M-Pesa-ready checkout</span><span><Icon name="mail"/> Verified email</span></div></div><div className="auth-form"><span className="eyebrow">{mode==='login'?'Account access':'New account'}</span><h2>{mode==='login'?'Sign in':'Create your account'}</h2><p className="form-intro">{mode==='login'?'Use your email and password to continue.':'We will send a 6-digit code to verify your email.'}</p><form onSubmit={submit} className="form-stack">{mode==='register'&&<Field label="Full name"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Your full name"/></Field>}<Field label="Email"><input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></Field>{mode==='register'&&<Field label="Safaricom phone"><input required value={form.phone_number} onChange={e=>setForm({...form,phone_number:e.target.value})} placeholder="0712 345 678"/></Field>}<Field label="Password"><input required minLength="8" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="At least 8 characters"/></Field>{error&&<div className="alert error">{error}</div>}<Button className="wide-action">{mode==='login'?'Sign in':'Create account'} <Icon name="arrow"/></Button></form><div className="auth-switch">{mode==='login'?'New to DukaFine?':'Already have an account?'} <Link to={mode==='login'?'/register':'/login'}>{mode==='login'?'Create an account':'Sign in'}</Link></div></div></div></div>{otpEmail&&<OtpModal email={otpEmail} notice={otpNotice} autoResend={otpAutoResend} onClose={()=>setOtpEmail(null)} onVerified={data=>{localStorage.setItem('dukafine_token',data.token);navigate('/')}}/>}</Layout>
 }
+
+function Field({label,children}) { return <label className="field"><span>{label}</span>{children}</label> }
 
 function Checkout({ cart, clearCart }) {
   const [address,setAddress]=useState('')
@@ -333,52 +313,53 @@ function Checkout({ cart, clearCart }) {
   const [message,setMessage]=useState('')
   const [loading,setLoading]=useState(false)
   const navigate=useNavigate()
-  const submit=async e=>{e.preventDefault();setLoading(true);setMessage('');try{const verified=await api('/checkout/verify',{method:'POST',body:JSON.stringify({items:cart.map(x=>({product_id:x._id,quantity:x.quantity})),delivery_address:address})});setMessage(`Stock verified: KSh ${verified.amount.toLocaleString()}. Initializing M-Pesa STK Push...`);const out=await api('/checkout',{method:'POST',body:JSON.stringify({items:cart.map(x=>({product_id:x._id,quantity:x.quantity})),delivery_address:address,phone_number:phone})});clearCart();navigate(`/order/${out.order._id}`)}catch(e){setMessage(e.data?.detail?`${e.message}: ${e.data.detail}`:e.message)}finally{setLoading(false)}}
-  if(!cart.length) return <Layout cartCount={0}><div className="max-w-xl mx-auto p-10">Your cart is empty.</div></Layout>
-  return <Layout cartCount={cart.reduce((s,x)=>s+x.quantity,0)}><div className="max-w-2xl mx-auto px-5 py-10"><div className="text-xs uppercase tracking-[.2em] text-emerald-800 font-bold">Secure checkout</div><h1 className="text-3xl font-black mt-2">Delivery & M-Pesa</h1><p className="text-sm text-slate-500 mt-2">Inventory is verified again immediately before payment.</p><form onSubmit={submit} className="bg-white border border-slate-200 rounded-3xl p-6 mt-7 space-y-4"><label className="block text-sm font-bold">Delivery address<textarea required value={address} onChange={e=>setAddress(e.target.value)} rows="4" className="mt-2 w-full border rounded-xl p-3" placeholder="Estate, building, town..."/></label><label className="block text-sm font-bold">Safaricom number<input required value={phone} onChange={e=>setPhone(e.target.value)} className="mt-2 w-full border rounded-xl p-3" placeholder="0712345678"/></label><div className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900 flex gap-3"><Icon name="shield"/><span>Your checkout initializes the configured Daraja Buy Goods STK Push after the stock pre-check.</span></div>{message&&<div className="p-3 rounded-xl bg-slate-100 text-sm">{message}</div>}<button disabled={loading} className="w-full bg-emerald-800 disabled:bg-slate-400 text-white py-3.5 rounded-xl font-bold">{loading?'Processing...':'Verify stock & pay with M-Pesa'}</button></form></div></Layout>
+  const total=cart.reduce((s,x)=>s+x.price*x.quantity,0)
+  const submit=async e=>{e.preventDefault();setLoading(true);setMessage('');try{const items=cart.map(x=>({product_id:x._id,quantity:x.quantity}));const verified=await api('/checkout/verify',{method:'POST',body:JSON.stringify({items,delivery_address:address})});setMessage(`Stock verified for ${money(verified.amount)}. Initializing M-Pesa...`);const out=await api('/checkout',{method:'POST',body:JSON.stringify({items,delivery_address:address,phone_number:phone})});clearCart();navigate(`/order/${out.order._id}`)}catch(e){setMessage(e.data?.detail?`${e.message}: ${e.data.detail}`:e.message)}finally{setLoading(false)}}
+  if(!cart.length)return <Layout><div className="container narrow page-space"><EmptyState title="Nothing to check out" text="Add products to your cart first." action={<Link className="btn btn-primary" to="/">Browse products</Link>}/></div></Layout>
+  return <Layout cartCount={cart.reduce((s,x)=>s+x.quantity,0)}><div className="container narrow page-space"><Link to="/cart" className="back-link"><Icon name="back" size={16}/> Back to cart</Link><div className="page-heading checkout-heading"><span className="eyebrow">Secure checkout</span><h1>Delivery & M-Pesa</h1><p>Inventory is checked again immediately before payment is requested.</p></div><div className="checkout-layout"><form onSubmit={submit} className="checkout-form"><Field label="Delivery address"><textarea required rows="4" value={address} onChange={e=>setAddress(e.target.value)} placeholder="Estate, building, town, delivery notes..."/></Field><Field label="Safaricom number"><input required value={phone} onChange={e=>setPhone(e.target.value)} placeholder="0712 345 678"/></Field><div className="security-note"><Icon name="shield"/><div><strong>Your payment is protected</strong><span>The configured Daraja STK Push will be requested after stock verification.</span></div></div>{message&&<div className="alert info">{message}</div>}<Button className="wide-action" disabled={loading}>{loading?'Processing checkout...':<>Verify stock & pay <Icon name="arrow"/></>}</Button></form><aside className="summary-card"><span className="eyebrow">Summary</span>{cart.map(x=><div className="mini-item" key={x._id}><span>{x.name} × {x.quantity}</span><b>{money(x.price*x.quantity)}</b></div>)}<div className="summary-total"><span>Total</span><strong>{money(total)}</strong></div></aside></div></div></Layout>
 }
 
 function Order({ clearCart }) {
-  const {id}=useParams(); const [order,setOrder]=useState(null)
-  useEffect(()=>{let timer;const load=()=>api(`/orders/${id}`).then(x=>{setOrder(x.order);if(['payment_pending'].includes(x.order.status))timer=setTimeout(load,4000)}).catch(console.error);load();return()=>clearTimeout(timer)},[id])
-  return <Layout cartCount={0}><div className="max-w-xl mx-auto px-5 py-12">{!order?<div>Checking order...</div>:<div className="bg-white border border-slate-200 rounded-3xl p-7 text-center"><div className={`w-16 h-16 rounded-full mx-auto grid place-items-center ${order.status==='paid'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-700'}`}><Icon name={order.status==='paid'?'check':'bag'} size={28}/></div><h1 className="text-2xl font-black mt-5">{order.status==='paid'?'Payment received':'Payment pending'}</h1><p className="text-slate-500 mt-2">Order {order.order_number}</p><div className="text-3xl font-black mt-6">KSh {order.amount.toLocaleString()}</div>{order.mpesa_code&&<div className="mt-4 text-sm">M-Pesa receipt: <b>{order.mpesa_code}</b></div>}<p className="text-sm text-slate-500 mt-5">A receipt is sent by email after successful confirmation.</p><Link to="/" className="inline-block mt-6 bg-emerald-800 text-white rounded-xl px-5 py-3 font-bold">Back to marketplace</Link></div>}</div></Layout>
+  const {id}=useParams(); const [order,setOrder]=useState(null); const [error,setError]=useState('')
+  useEffect(()=>{let timer;let alive=true;const load=()=>api(`/orders/${id}`).then(x=>{if(!alive)return;setOrder(x.order);if(x.order.status==='payment_pending')timer=setTimeout(load,4000)}).catch(e=>setError(e.message));load();return()=>{alive=false;clearTimeout(timer)}},[id])
+  if(error)return <Layout><div className="container narrow page-space"><EmptyState title="Order unavailable" text={error} action={<Link className="btn btn-primary" to="/">Back to marketplace</Link>}/></div></Layout>
+  if(!order)return <Layout><div className="container narrow page-space"><div className="loading-panel"><div className="spinner"></div><h2>Checking your order</h2><p>Waiting for the latest payment status...</p></div></div></Layout>
+  const paid=order.status==='paid'
+  return <Layout><div className="container narrow page-space"><div className="order-result"><div className={`result-icon ${paid?'success':'pending'}`}><Icon name={paid?'check':'refresh'} size={32}/></div><span className="eyebrow">{paid?'Payment confirmed':'Payment pending'}</span><h1>{paid?'Thank you for your order.':'Your payment is being confirmed.'}</h1><p>Order <strong>{order.order_number}</strong></p><div className="order-amount">{money(order.amount)}</div>{order.mpesa_code&&<div className="receipt-code">M-Pesa receipt <strong>{order.mpesa_code}</strong></div>}<div className="order-note">{paid?'A receipt has been sent by email.':'Keep this page open while we wait for the M-Pesa callback.'}</div><div className="result-actions"><Link className="btn btn-primary" to="/">Continue shopping</Link><Link className="btn btn-outline" to="/account">My account</Link></div></div></div></Layout>
 }
 
 function Seller() {
-  const [stores,setStores]=useState([]),[form,setForm]=useState({name:'',till_number:'',phone_number:'',email:''}),[product,setProduct]=useState({store_id:'',name:'',price:'',quantity:'',image_url:'',description:''}),[msg,setMsg]=useState('')
-  useEffect(()=>{api('/stores').then(x=>setStores(x.stores)).catch(()=>{})},[])
-  const createStore=async e=>{e.preventDefault();try{const x=await api('/stores',{method:'POST',body:JSON.stringify(form)});setStores([...stores,x.store]);setMsg('Store created.');}catch(e){setMsg(e.message)}}
-  const createProduct=async e=>{e.preventDefault();try{await api('/products',{method:'POST',body:JSON.stringify({...product,price:Number(product.price),quantity:Number(product.quantity)})});setMsg('Product created.');}catch(e){setMsg(e.message)}}
-  const share=async id=>{try{const x=await api(`/share/product/${id}`);await navigator.clipboard.writeText(x.whatsapp_url);setMsg('WhatsApp sharing link copied to clipboard. Paste it into your group.')}catch(e){setMsg(e.message)}}
-  return <Layout cartCount={0}><div className="max-w-7xl mx-auto px-5 py-10"><div className="flex justify-between"><div><div className="text-xs uppercase tracking-[.2em] text-emerald-800 font-bold">Merchant console</div><h1 className="text-3xl font-black">Seller workspace</h1></div></div>{msg&&<div className="mt-5 p-3 rounded-xl bg-emerald-50 text-emerald-900 text-sm">{msg}</div>}<div className="grid lg:grid-cols-2 gap-5 mt-7"><form onSubmit={createStore} className="bg-white border rounded-3xl p-6"><h2 className="font-black text-xl">Create storefront</h2><div className="space-y-3 mt-5">{[['name','Store name'],['till_number','Buy Goods Till'],['phone_number','Seller phone'],['email','Seller email']].map(([k,l])=><input key={k} required placeholder={l} value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})} className="w-full border rounded-xl p-3"/>)}<button className="w-full bg-emerald-800 text-white rounded-xl py-3 font-bold">Create store</button></div></form><form onSubmit={createProduct} className="bg-white border rounded-3xl p-6"><h2 className="font-black text-xl">Add product</h2><div className="space-y-3 mt-5"><select required value={product.store_id} onChange={e=>setProduct({...product,store_id:e.target.value})} className="w-full border rounded-xl p-3"><option value="">Select store</option>{stores.map(s=><option key={s._id} value={s._id}>{s.vendor_name}</option>)}</select>{[['name','Product name'],['price','Price'],['quantity','Stock'],['image_url','Image URL']].map(([k,l])=><input key={k} required placeholder={l} value={product[k]} onChange={e=>setProduct({...product,[k]:e.target.value})} className="w-full border rounded-xl p-3"/>)}<textarea placeholder="Description" value={product.description} onChange={e=>setProduct({...product,description:e.target.value})} className="w-full border rounded-xl p-3"/><button className="w-full bg-emerald-800 text-white rounded-xl py-3 font-bold">Publish product</button></div></form></div><div className="mt-7 bg-white border rounded-3xl p-6"><h2 className="font-black text-xl">Stores</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">{stores.map(s=><div key={s._id} className="border rounded-2xl p-4"><div className="font-bold">{s.vendor_name}</div><div className="text-xs text-slate-500 mt-1">Buy Goods Till: {s.till_number}</div><div className="text-xs text-slate-500">Phone: {s.phone_number}</div></div>)}</div><p className="text-xs text-slate-400 mt-5">The Share to WhatsApp Group action is available through the product sharing endpoint and can be wired to each seller's product list.</p></div></div></Layout>
+  const [stores,setStores]=useState([])
+  const [form,setForm]=useState({name:'',till_number:'',phone_number:'',email:''})
+  const [product,setProduct]=useState({store_id:'',name:'',price:'',quantity:'',image_url:'',description:''})
+  const [msg,setMsg]=useState('')
+  const [tab,setTab]=useState('overview')
+  useEffect(()=>{api('/stores').then(x=>setStores(x.stores||[])).catch(e=>setMsg(e.message))},[])
+  const createStore=async e=>{e.preventDefault();try{const x=await api('/stores',{method:'POST',body:JSON.stringify(form)});setStores(s=>[...s,x.store]);setMsg('Storefront created successfully.');setForm({name:'',till_number:'',phone_number:'',email:''})}catch(e){setMsg(e.message)}}
+  const createProduct=async e=>{e.preventDefault();try{await api('/products',{method:'POST',body:JSON.stringify({...product,price:Number(product.price),quantity:Number(product.quantity)}));setMsg('Product published successfully.');setProduct({store_id:'',name:'',price:'',quantity:'',image_url:'',description:''})}catch(e){setMsg(e.message)}}
+  return <Layout><div className="container page-space"><div className="dashboard-header"><div><span className="eyebrow">Merchant console</span><h1>Seller workspace</h1><p>Set up your storefront and publish products for shoppers.</p></div><div className="dashboard-icon"><Icon name="store" size={26}/></div></div>{msg&&<div className={`alert ${msg.toLowerCase().includes('success')||msg.includes('created')||msg.includes('published')?'success':'error'}`}>{msg}</div>}<div className="dash-tabs"><button className={tab==='overview'?'active':''} onClick={()=>setTab('overview')}>Overview</button><button className={tab==='store'?'active':''} onClick={()=>setTab('store')}>Storefront</button><button className={tab==='product'?'active':''} onClick={()=>setTab('product')}>Add product</button></div>{tab==='overview'&&<div className="dashboard-grid"><div className="metric-card"><span>Storefronts</span><strong>{stores.length}</strong><small>Connected to DukaFine</small></div><div className="metric-card"><span>Checkout</span><strong>M-Pesa</strong><small>Configured in backend</small></div><div className="metric-card"><span>Growth</span><strong>Online</strong><small>Share products with customers</small></div><div className="workspace-card"><div><span className="eyebrow">Quick start</span><h2>Get your first product online</h2><p>Create a storefront, then publish products with a price, stock count and image.</p></div><div className="quick-actions"><Button onClick={()=>setTab('store')}>Create storefront</Button><Button variant="outline" onClick={()=>setTab('product')}>Add product</Button></div></div></div>}{tab==='store'&&<div className="two-col"><form onSubmit={createStore} className="form-card"><span className="eyebrow">New storefront</span><h2>Create a store</h2><div className="form-stack">{[['name','Store name'],['till_number','Buy Goods Till'],['phone_number','Seller phone'],['email','Seller email']].map(([k,l])=><Field key={k} label={l}><input required value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={l}/></Field>)}<Button className="wide-action">Create store</Button></div></form><div className="list-card"><span className="eyebrow">Your stores</span><h2>Storefronts</h2>{stores.length?<div className="store-list">{stores.map(s=><div className="store-list-item" key={s._id}><div className="store-avatar"><Icon name="store"/></div><div><strong>{s.vendor_name}</strong><small>Till {s.till_number || '—'} · {s.phone_number || '—'}</small></div></div>)}</div>:<p className="muted">No storefronts yet.</p>}</div></div>}{tab==='product'&&<div className="two-col"><form onSubmit={createProduct} className="form-card"><span className="eyebrow">Catalog</span><h2>Publish a product</h2><div className="form-stack"><Field label="Store"><select required value={product.store_id} onChange={e=>setProduct({...product,store_id:e.target.value})}><option value="">Select storefront</option>{stores.map(s=><option key={s._id} value={s._id}>{s.vendor_name}</option>)}</select></Field><Field label="Product name"><input required value={product.name} onChange={e=>setProduct({...product,name:e.target.value})}/></Field><div className="form-row"><Field label="Price (KSh)"><input required type="number" min="0" value={product.price} onChange={e=>setProduct({...product,price:e.target.value})}/></Field><Field label="Stock"><input required type="number" min="0" value={product.quantity} onChange={e=>setProduct({...product,quantity:e.target.value})}/></Field></div><Field label="Image URL"><input required value={product.image_url} onChange={e=>setProduct({...product,image_url:e.target.value})} placeholder="https://..."/></Field><Field label="Description"><textarea rows="5" value={product.description} onChange={e=>setProduct({...product,description:e.target.value})}/></Field><Button className="wide-action">Publish product <Icon name="arrow"/></Button></div></form><div className="info-card"><div className="info-icon"><Icon name="chart"/></div><h2>Product checklist</h2><p>Clear product names and accurate stock counts help customers buy with confidence.</p><ul><li>Use a bright, clear product image.</li><li>Keep the price and stock count accurate.</li><li>Write a short description that answers key questions.</li></ul></div></div>}</div></Layout>
 }
 
 function Admin() {
-  const [stats,setStats]=useState(null),[orders,setOrders]=useState([]),[logs,setLogs]=useState([])
-  useEffect(()=>{Promise.all([api('/admin/stats'),api('/admin/orders'),api('/admin/logs')]).then(([a,b,c])=>{setStats(a);setOrders(b.orders);setLogs(c.logs)}).catch(console.error)},[])
-  return <Layout cartCount={0}><div className="max-w-7xl mx-auto px-5 py-10"><div className="flex items-center gap-3"><div className="w-11 h-11 bg-slate-900 text-white rounded-xl grid place-items-center"><Icon name="shield"/></div><div><div className="text-xs uppercase tracking-[.2em] text-slate-500 font-bold">Administration</div><h1 className="text-3xl font-black">DukaFine Control Center</h1></div></div>{stats&&<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-7">{[['Users',stats.users],['Stores',stats.stores],['Products',stats.products],['Orders',stats.orders],['Paid',stats.paid_orders],['Revenue',`KSh ${stats.revenue.toLocaleString()}`]].map(([a,b])=><div key={a} className="bg-white border rounded-2xl p-4"><div className="text-xs text-slate-500">{a}</div><div className="text-xl font-black mt-2">{b}</div></div>)}</div>}<div className="grid lg:grid-cols-2 gap-5 mt-7"><div className="bg-white border rounded-3xl p-5 overflow-auto"><h2 className="font-black">Recent orders</h2><table className="w-full text-sm mt-4"><tbody>{orders.slice(0,15).map(o=><tr key={o._id} className="border-b"><td className="py-3">{o.order_number}</td><td>{o.status}</td><td className="text-right">KSh {o.amount?.toLocaleString()}</td></tr>)}</tbody></table></div><div className="bg-white border rounded-3xl p-5 max-h-[500px] overflow-auto"><h2 className="font-black">Audit logs</h2><div className="space-y-2 mt-4">{logs.map(l=><div key={l._id} className="border-b pb-2"><div className="text-sm font-semibold">{l.action}</div><div className="text-[11px] text-slate-500">{l.actor_email || 'system'} · {new Date(l.created_at).toLocaleString()}</div></div>)}</div></div></div></div></Layout>
+  const [stats,setStats]=useState(null),[orders,setOrders]=useState([]),[logs,setLogs]=useState([]),[stores,setStores]=useState([]),[error,setError]=useState('')
+  const load=()=>Promise.all([api('/admin/stats'),api('/admin/orders'),api('/admin/logs'),api('/admin/stores')]).then(([a,b,c,d])=>{setStats(a);setOrders(b.orders||[]);setLogs(c.logs||[]);setStores(d.stores||[])}).catch(e=>setError(e.message))
+  useEffect(()=>{load()},[])
+  return <Layout><div className="container page-space"><div className="dashboard-header"><div><span className="eyebrow">Administration</span><h1>Control center</h1><p>Monitor marketplace activity, orders, stores and audit events.</p></div><button className="icon-button refresh-button" onClick={load}><Icon name="refresh"/></button></div>{error&&<div className="alert error">{error}</div>}{stats&&<div className="admin-stats">{[['Users',stats.users],['Stores',stats.stores],['Products',stats.products],['Orders',stats.orders],['Paid orders',stats.paid_orders],['Revenue',money(stats.revenue)]].map(([a,b])=><div className="metric-card" key={a}><span>{a}</span><strong>{b}</strong><small>Current database totals</small></div>)}</div>}<div className="admin-grid"><div className="table-card"><div className="card-heading"><div><span className="eyebrow">Transactions</span><h2>Recent orders</h2></div></div><div className="table-scroll"><table><thead><tr><th>Order</th><th>Status</th><th>Amount</th></tr></thead><tbody>{orders.slice(0,20).map(o=><tr key={o._id}><td><strong>{o.order_number}</strong></td><td><span className={`status ${o.status}`}>{o.status}</span></td><td>{money(o.amount)}</td></tr>)}</tbody></table></div></div><div className="table-card"><div className="card-heading"><div><span className="eyebrow">Stores</span><h2>Merchant list</h2></div></div><div className="admin-list">{stores.slice(0,20).map(s=><div key={s._id}><span className="store-avatar"><Icon name="store" size={16}/></span><div><strong>{s.vendor_name}</strong><small>Till {s.till_number || '—'}</small></div></div>)}</div></div><div className="table-card logs-card"><div className="card-heading"><div><span className="eyebrow">Security</span><h2>Audit log</h2></div></div><div className="log-list">{logs.slice(0,30).map(l=><div key={l._id}><span className="log-dot"></span><div><strong>{l.action}</strong><small>{l.actor_email || 'system'} · {new Date(l.created_at).toLocaleString()}</small></div></div>)}</div></div></div></div></Layout>
 }
 
 function Account() {
   const [user,setUser]=useState(null)
-  useEffect(()=>{api('/auth/me').then(x=>setUser(x.user)).catch(console.error)},[])
-  return <Layout cartCount={0}><div className="max-w-2xl mx-auto px-5 py-12"><div className="bg-white border rounded-3xl p-7"><div className="text-xs uppercase tracking-[.2em] text-emerald-800 font-bold">Account</div><h1 className="text-3xl font-black mt-2">{user?.name || 'Account'}</h1><p className="text-slate-500 mt-2">{user?.email}</p><p className="text-slate-500">{user?.phone_number}</p><button onClick={()=>{localStorage.removeItem('dukafine_token');location.href='/'}} className="mt-6 border border-red-200 text-red-700 rounded-xl px-5 py-3 font-bold">Sign out</button></div></div></Layout>
+  useEffect(()=>{api('/auth/me').then(x=>setUser(x.user)).catch(()=>{})},[])
+  const logout=()=>{localStorage.removeItem('dukafine_token');location.href='/'}
+  return <Layout><div className="container narrow page-space"><div className="account-card"><div className="account-avatar">{(user?.name||'U').slice(0,1).toUpperCase()}</div><span className="eyebrow">My account</span><h1>{user?.name || 'Account'}</h1><p className="account-email">{user?.email}</p><div className="account-details"><div><Icon name="mail"/><span><small>Email</small><strong>{user?.email || '—'}</strong></span></div><div><Icon name="phone"/><span><small>Phone</small><strong>{user?.phone_number || '—'}</strong></span></div><div><Icon name="shield"/><span><small>Role</small><strong>{user?.role || 'customer'}</strong></span></div></div><Button variant="danger" onClick={logout}><Icon name="logout"/> Sign out</Button></div></div></Layout>
 }
 
 function NotFound() {
-  return <Layout cartCount={0}>
-    <div className="max-w-xl mx-auto px-5 py-24 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-500 grid place-items-center mx-auto"><Icon name="x" size={28}/></div>
-      <div className="text-xs uppercase tracking-[.2em] text-emerald-800 font-bold mt-6">404</div>
-      <h1 className="text-3xl font-black mt-2">Page not found</h1>
-      <p className="text-slate-500 mt-3">The page you're looking for doesn't exist, was moved, or the link is broken.</p>
-      <Link to="/" className="inline-block mt-7 bg-emerald-800 text-white rounded-xl px-6 py-3 font-bold">Back to marketplace</Link>
-    </div>
-  </Layout>
+  return <Layout><div className="container narrow page-space"><div className="empty-state large"><div className="empty-icon"><Icon name="x" size={30}/></div><span className="eyebrow">404</span><h1>Page not found</h1><p>The page may have moved or the link may be incorrect.</p><Link className="btn btn-primary" to="/">Back to marketplace</Link></div></div></Layout>
 }
 
 function App() {
-  const [cart,setCart]=useState(()=>JSON.parse(localStorage.getItem('dukafine_cart')||'[]'))
+  const [cart,setCart]=useState(()=>{try{return JSON.parse(localStorage.getItem('dukafine_cart')||'[]')}catch{return []}})
   useEffect(()=>localStorage.setItem('dukafine_cart',JSON.stringify(cart)),[cart])
   const addToCart=p=>setCart(c=>{const x=c.find(i=>i._id===p._id);return x?c.map(i=>i._id===p._id?{...i,quantity:i.quantity+1}:i):[...c,{...p,quantity:1}]})
   const clearCart=()=>setCart([])
@@ -397,4 +378,4 @@ function App() {
   </Routes>
 }
 
-createRoot(document.getElementById('root')).render(<BrowserRouter><App/></BrowserRouter>)
+export default App

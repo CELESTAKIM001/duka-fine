@@ -305,6 +305,36 @@ def send_otp_email(user, otp):
     return sent
 
 
+def validate_mpesa_config():
+    """Validate required Daraja configuration without exposing secrets."""
+    required = [
+        "MPESA_ENV",
+        "MPESA_CONSUMER_KEY",
+        "MPESA_CONSUMER_SECRET",
+        "MPESA_TRANSACTION_TYPE",
+        "MPESA_BUSINESS_SHORT_CODE",
+        "MPESA_VENDOR_TILL",
+        "MPESA_PASSKEY",
+        "MPESA_CALLBACK_URL",
+    ]
+
+    missing = [name for name in required if not env(name)]
+    if missing:
+        raise RuntimeError(
+            "Missing M-Pesa configuration: " + ", ".join(missing)
+        )
+
+    environment = env("MPESA_ENV", "sandbox").lower()
+    if environment not in {"sandbox", "production"}:
+        raise RuntimeError("MPESA_ENV must be sandbox or production.")
+
+    callback = env("MPESA_CALLBACK_URL")
+    if not callback.startswith("https://"):
+        raise RuntimeError("MPESA_CALLBACK_URL must use HTTPS.")
+
+    return True
+
+
 def mpesa_base():
     return "https://sandbox.safaricom.co.ke" if env("MPESA_ENV", "sandbox").lower() == "sandbox" else "https://api.safaricom.co.ke"
 
@@ -316,7 +346,8 @@ def mpesa_token():
         raise RuntimeError("Daraja consumer credentials are not configured")
     auth = base64.b64encode(f"{key}:{secret}".encode()).decode()
     response = requests.get(
-        f"{mpesa_base()}/oauth/v1/generate?grant_type=client_credentials",
+        f"{mpesa_base()}/oauth/v1/generate",
+        params={"grant_type": "client_credentials"},
         headers={"Authorization": f"Basic {auth}"},
         timeout=20,
     )
@@ -355,6 +386,8 @@ def initiate_stk(order, customer_phone, vendor_till):
         "TransactionDesc": f"DUKAFINE {order['order_number']}",
     }
 
+    validate_mpesa_config()
+
     token = mpesa_token()
     response = requests.post(
         f"{mpesa_base()}/mpesa/stkpush/v1/processrequest",
@@ -369,6 +402,25 @@ def initiate_stk(order, customer_phone, vendor_till):
         raise RuntimeError(data.get("errorMessage") or data.get("ResponseDescription") or "STK Push rejected")
 
     return data
+
+
+
+@app.get("/api/mpesa/health")
+def mpesa_health():
+    """Safe M-Pesa configuration health check. Does not expose secrets."""
+    try:
+        validate_mpesa_config()
+        return jsonify({
+            "ok": True,
+            "environment": env("MPESA_ENV", "sandbox"),
+            "callback_configured": bool(env("MPESA_CALLBACK_URL")),
+            "message": "M-Pesa configuration is present."
+        }), 200
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "message": str(exc)
+        }), 503
 
 
 @app.get("/api/health")
